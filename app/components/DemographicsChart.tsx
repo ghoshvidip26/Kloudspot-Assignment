@@ -87,7 +87,7 @@ export default function DemographicsChart({ date }: { date: Date }) {
               {
                 data: [maleAvg, femaleAvg],
                 backgroundColor: ["rgba(42, 127, 125, 0.6)", "rgba(71, 178, 176, 0.4)"],
-                cutout: "70%",
+                // cutout: "70%",
               },
             ],
           }}
@@ -164,14 +164,14 @@ export default function DemographicsChart({ date }: { date: Date }) {
                 x: {
                   grid: {
                     color: "rgba(0,0,0,0.05)",
-                    borderDash: [4, 4],
+                    // borderDash: [4, 4],
                   },
                 },
                 y: {
                   beginAtZero: true,
                   grid: {
                     color: "rgba(0,0,0,0.05)",
-                    borderDash: [4, 4],
+                    // borderDash: [4, 4],
                   },
                 },
               },
