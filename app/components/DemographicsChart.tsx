@@ -30,21 +30,23 @@ export default function DemographicsChart({ date }: { date: Date }) {
 
   const [dataRaw, setDataRaw] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  console.log("date: ", date.getTime());
 
   useEffect(() => {
     loadSites();
-  }, []);
+  }, [loadSites]);
+
 
   useEffect(() => {
     if (!selectedSiteId) return;
 
-    const now = Date.now();
-    const yesterday = date.getTime() - 86400000;
+    const to = date.getTime();
+    const from = to - 86400000;
 
-    api
-      .getDemographics(selectedSiteId, yesterday, now)
+    api.getDemographics(selectedSiteId, from, to)
       .then((res) => setDataRaw(res.data))
       .finally(() => setLoading(false));
+
   }, [selectedSiteId, date]);
 
   const labels =
@@ -206,7 +208,10 @@ function Legend({
           <path d="M5.5 21a6.5 6.5 0 0 1 13 0" />
         </svg>
       ) : (
-        <span className={`w-3 h-3 rounded-full bg-${color}`} />
+        <span
+          className="w-3 h-3 rounded-full"
+          style={{ backgroundColor: color }}
+        />
       )}
       <span className="text-gray-700 font-medium">{label}</span>
     </div>

@@ -11,7 +11,7 @@ import {
     Filler,
 } from "chart.js";
 import { Line } from "react-chartjs-2";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { api } from "../utils/api";
 import { sitesStore } from "../utils/utils";
 
@@ -27,23 +27,19 @@ const liveLinePlugin = {
         );
 
         ctx.save();
-
-        // dashed red line
-        ctx.beginPath();
         ctx.setLineDash([6, 6]);
         ctx.strokeStyle = "#B91C1C";
         ctx.lineWidth = 1.5;
+        ctx.beginPath();
         ctx.moveTo(x, chartArea.top);
         ctx.lineTo(x, chartArea.bottom);
         ctx.stroke();
 
-        // LIVE label
         ctx.setLineDash([]);
         ctx.fillStyle = "#B91C1C";
         ctx.font = "bold 11px sans-serif";
         ctx.textAlign = "center";
         ctx.fillText("LIVE", x, chartArea.top - 8);
-
         ctx.restore();
     },
 };
@@ -70,13 +66,8 @@ const options = {
             align: "end" as const,
             labels: {
                 usePointStyle: true,
-                pointStyle: "circle",
                 color: "#6B7280",
             },
-        },
-        tooltip: {
-            mode: "index" as const,
-            intersect: false,
         },
     },
     interaction: {
@@ -87,36 +78,18 @@ const options = {
     scales: {
         x: {
             grid: {
-                drawBorder: false,
                 color: "rgba(0,0,0,0.06)",
                 borderDash: [4, 4],
             },
-            ticks: {
-                color: "#6B7280",
-            },
-            title: {
-                display: true,
-                text: "Time",
-                color: "#374151",
-                font: { weight: "500" },
-            },
+            ticks: { color: "#6B7280" },
         },
         y: {
             beginAtZero: true,
             grid: {
-                drawBorder: false,
                 color: "rgba(0,0,0,0.06)",
                 borderDash: [4, 4],
             },
-            ticks: {
-                color: "#6B7280",
-            },
-            title: {
-                display: true,
-                text: "Count",
-                color: "#374151",
-                font: { weight: "500" },
-            },
+            ticks: { color: "#6B7280" },
         },
     },
 };
@@ -136,79 +109,75 @@ export function Occupancy({ date }: { date: Date }) {
 
     /* Fetch occupancy */
     useEffect(() => {
-        if (!selectedSiteId) return;
+        if (!selectedSiteId || !date) return;
 
         const fetchData = async () => {
             setLoading(true);
-            const now = Date.now();
-            const yesterday = now - 24 * 60 * 60 * 1000;
+            const to = date.getTime();
+            const from = to - 86400000;
 
-            const res = await api.getOccupancyAnalytics(
-                selectedSiteId,
-                date,
-                now
-            );
+            const res = await api.getOccupancyAnalytics(selectedSiteId, from, to);
 
             setRawData(res.data);
             setLoading(false);
         };
 
         fetchData();
-    }, [selectedSiteId]);
-
-    if (loading) return <p className="p-4">Loading occupancy…</p>;
+    }, [selectedSiteId, date]); // ✅ FIXED
 
     /* Map API → Chart */
-    const labels =
-        rawData?.buckets?.map((b: any) =>
+    const chartData = useMemo(() => {
+        if (!rawData?.buckets) return null;
+
+        const labels = rawData.buckets.map((b: any) =>
             b.local.split(" ")[1].slice(0, 5)
-        ) ?? [];
+        );
 
-    const values =
-        rawData?.buckets?.map((b: any) => b.avg) ?? [];
+        const values = rawData.buckets.map((b: any) => b.avg);
 
-    const data = {
-        labels,
-        datasets: [
-            {
-                label: "Occupancy",
-                data: values,
-                fill: true,
-                borderColor: "#6AA6A5",
-                backgroundColor: (context: any) => {
-                    const { ctx, chartArea } = context.chart;
-                    if (!chartArea) return "rgba(180, 205, 204, 0.6)";
+        return {
+            labels,
+            datasets: [
+                {
+                    label: "Occupancy",
+                    data: values,
+                    fill: true,
+                    borderColor: "#6AA6A5",
+                    backgroundColor: (context: any) => {
+                        const { ctx, chartArea } = context.chart;
+                        if (!chartArea) return "rgba(180,205,204,0.6)";
 
-                    const gradient = ctx.createLinearGradient(
-                        0,
-                        chartArea.top,
-                        0,
-                        chartArea.bottom
-                    );
+                        const gradient = ctx.createLinearGradient(
+                            0,
+                            chartArea.top,
+                            0,
+                            chartArea.bottom
+                        );
 
-                    gradient.addColorStop(0, "rgba(180, 205, 204, 0.65)");
-                    gradient.addColorStop(0.6, "rgba(180, 205, 204, 0.25)");
-                    gradient.addColorStop(1, "rgba(180, 205, 204, 0.05)");
+                        gradient.addColorStop(0, "rgba(180,205,204,0.65)");
+                        gradient.addColorStop(0.6, "rgba(180,205,204,0.25)");
+                        gradient.addColorStop(1, "rgba(180,205,204,0.05)");
 
-                    return gradient;
+                        return gradient;
+                    },
+                    tension: 0.25,
+                    pointRadius: 0,
+                    borderWidth: 2,
                 },
+            ],
+        };
+    }, [rawData]); // ✅ prevents blank chart
 
-                tension: 0.25,
-                pointRadius: 0,
-                borderWidth: 2,
-            },
-        ],
-    };
+    if (loading || !chartData)
+        return <p className="p-4">Loading occupancy…</p>;
 
     return (
-        <div className="w-full">
-            <div className="bg-white p-6 rounded-lg shadow">
-                <h3 className="text-base font-semibold text-gray-800 mb-4">
-                    Overall Occupancy
-                </h3>
-                <div className="h-[350px]">
-                    <Line data={data} options={options} />
-                </div>
+        <div className="bg-white p-6 rounded-lg shadow">
+            <h3 className="text-base font-semibold text-gray-800 mb-4">
+                Overall Occupancy
+            </h3>
+            <div className="h-[350px]">
+                <Line data={chartData} options={options} />
             </div>
         </div>
     );
