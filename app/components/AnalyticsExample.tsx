@@ -9,25 +9,9 @@ export default function AnalyticsExample() {
     const [error, setError] = useState<string | null>(null);
     const [siteId, setSiteId] = useState<string | null>(null);
 
-    // First, load sites
-    useEffect(() => {
-        const loadSites = async () => {
-            try {
-                const response = await api.getSites();
-                sitesStore.getState().setSites(response.data);
-                // Set the first site as the selected one
-                if (response.data && response.data.length > 0) {
-                    setSiteId(response.data[0].siteId);
-                }
-            } catch (err) {
-                console.error("Error loading sites:", err);
-            }
-        };
-        loadSites();
-    }, []);
-
     // Then, fetch dwell analytics when siteId is available
     useEffect(() => {
+        sitesStore.getState().loadSites();
         if (!siteId) return; // Don't fetch if siteId is not set yet
 
         const fetchDwellAnalytics = async () => {
@@ -57,7 +41,7 @@ export default function AnalyticsExample() {
         };
 
         fetchDwellAnalytics();
-    }, [siteId]); // Re-fetch when siteId changes
+    }, [siteId]);
 
     if (loading) return <p>Loading analytics data...</p>;
     if (error) return <p className="text-red-600">{error}</p>;

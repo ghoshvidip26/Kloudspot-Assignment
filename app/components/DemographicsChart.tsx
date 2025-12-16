@@ -1,5 +1,4 @@
 "use client";
-
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -10,7 +9,7 @@ import {
   Filler,
   ArcElement,
 } from "chart.js";
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Line, Doughnut } from "react-chartjs-2";
 import { api } from "../utils/api";
 import { sitesStore } from "../utils/utils";
@@ -22,204 +21,165 @@ ChartJS.register(
   LineElement,
   ArcElement,
   Tooltip,
-  Filler
+  Filler,
 );
 
-/* ---------------- Line Chart Options ---------------- */
-const lineOptions = {
-  responsive: true,
-  maintainAspectRatio: false,
-  plugins: {
-    legend: {
-      position: "top" as const,
-      align: "end" as const,
-      labels: {
-        usePointStyle: true,
-        pointStyle: "circle",
-      },
-    },
-  },
-  interaction: {
-    mode: "nearest" as const,
-    axis: "x" as const,
-    intersect: false,
-  },
-  scales: {
-    y: {
-      beginAtZero: true,
-    },
-  },
-};
+export default function DemographicsChart({ date }: { date: Date }) {
+  const selectedSiteId = sitesStore((s) => s.selectedSiteId);
+  const loadSites = sitesStore((s) => s.loadSites);
 
-/* ---------------- Donut Options ---------------- */
-const doughnutOptions = {
-  responsive: true,
-  maintainAspectRatio: false,
-  plugins: {
-    legend: { display: false },
-    tooltip: {
-      callbacks: {
-        label: (ctx: any) => `${ctx.label}: ${ctx.parsed}%`,
-      },
-    },
-  },
-};
-
-export default function DemographicsChart() {
-  const [siteId, setSiteId] = useState<string | null>(null);
-  const [demographicsData, setDemographicsData] = useState<any>(null);
+  const [dataRaw, setDataRaw] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
-  /* ---------------- Load Sites ---------------- */
   useEffect(() => {
-    api.getSites().then((res) => {
-      sitesStore.getState().setSites(res.data);
-      setSiteId(res.data?.[0]?.siteId);
-    });
+    loadSites();
   }, []);
 
-  /* ---------------- Fetch Demographics ---------------- */
   useEffect(() => {
-    if (!siteId) return;
+    if (!selectedSiteId) return;
 
     const now = Date.now();
-    const yesterday = now - 24 * 60 * 60 * 1000;
+    const yesterday = date.getTime() - 86400000;
 
     api
-      .getDemographics(siteId, yesterday, now)
-      .then((res) => setDemographicsData(res.data))
+      .getDemographics(selectedSiteId, yesterday, now)
+      .then((res) => setDataRaw(res.data))
       .finally(() => setLoading(false));
-  }, [siteId]);
+  }, [selectedSiteId, date]);
 
-  /* ---------------- Derived Data ---------------- */
   const labels =
-    demographicsData?.buckets?.map((b: any) =>
+    dataRaw?.buckets?.map((b: any) =>
       b.local.split(" ")[1].slice(0, 5)
     ) ?? [];
 
-  const maleData =
-    demographicsData?.buckets?.map((b: any) => b.male) ?? [];
-  const femaleData =
-    demographicsData?.buckets?.map((b: any) => b.female) ?? [];
+  const male = dataRaw?.buckets?.map((b: any) => b.male) ?? [];
+  const female = dataRaw?.buckets?.map((b: any) => b.female) ?? [];
 
   const { maleAvg, femaleAvg } = useMemo(() => {
-    if (!demographicsData?.buckets?.length)
-      return { maleAvg: 0, femaleAvg: 0 };
-
-    const totals = demographicsData.buckets.reduce(
-      (acc: any, b: any) => {
-        acc.male += b.male;
-        acc.female += b.female;
-        return acc;
+    if (!dataRaw?.buckets?.length) return { maleAvg: 0, femaleAvg: 0 };
+    const total = dataRaw.buckets.reduce(
+      (a: any, b: any) => {
+        a.m += b.male;
+        a.f += b.female;
+        return a;
       },
-      { male: 0, female: 0 }
+      { m: 0, f: 0 }
     );
-
-    const count = demographicsData.buckets.length;
-
+    const n = dataRaw.buckets.length;
     return {
-      maleAvg: +(totals.male / count).toFixed(1),
-      femaleAvg: +(totals.female / count).toFixed(1),
+      maleAvg: +(total.m / n).toFixed(1),
+      femaleAvg: +(total.f / n).toFixed(1),
     };
-  }, [demographicsData]);
+  }, [dataRaw, date]);
 
-  /* ---------------- Chart Data ---------------- */
-  const lineData = {
-    labels,
-    datasets: [
-      {
-        label: "Male",
-        data: maleData,
-        borderColor: "rgba(10, 93, 92, 1)",
-        backgroundColor: "rgba(10, 93, 92, 0.25)",
-        fill: true,
-        tension: 0.4,
-        pointRadius: 0,
-      },
-      {
-        label: "Female",
-        data: femaleData,
-        borderColor: "rgba(163, 213, 212, 1)",
-        backgroundColor: "rgba(163, 213, 212, 0.25)",
-        fill: true,
-        tension: 0.4,
-        pointRadius: 0,
-      },
-    ],
-  };
+  if (loading) return <div>Loading demographics…</div>;
 
-  const doughnutData = {
-    labels: ["Males", "Females"],
-    datasets: [
-      {
-        data: [maleAvg, femaleAvg],
-        backgroundColor: [
-          "rgba(10, 93, 92, 0.8)",
-          "rgba(163, 213, 212, 0.8)",
-        ],
-        cutout: "70%",
-      },
-    ],
-  };
-
-  if (loading) {
-    return (
-      <div className="bg-white p-6 rounded-lg shadow">
-        Loading demographics…
-      </div>
-    );
-  }
   return (
-    <div className="space-y-4">
-      <h2 className="text-lg font-semibold text-gray-800">
-        Demographics
-      </h2>
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* -------- LEFT : DONUT CARD -------- */}
-        <div className="bg-white p-6 rounded-lg shadow space-y-6">
-          <h3 className="text-sm font-semibold text-gray-700">
-            Chart of Demographics
-          </h3>
-
-          <div className="flex flex-col items-center gap-6">
-            <div className="relative h-[220px] w-[220px]">
-              <Doughnut data={doughnutData} options={doughnutOptions} />
-              <div className="absolute inset-0 flex flex-col items-center justify-center">
-                <p className="text-sm text-gray-500">Total Crowd</p>
-                <p className="text-2xl font-bold text-gray-800">100%</p>
-              </div>
-            </div>
-
-            <div className="space-y-4">
-              <Legend
-                color="bg-teal-800"
-                label={`${maleAvg}% Males`}
-                icon
-              />
-              <Legend
-                color="bg-teal-300"
-                label={`${femaleAvg}% Females`}
-                icon
-              />
-            </div>
-          </div>
+    <div className="grid grid-cols-3 gap-6">
+      <div className="relative bg-white p-6 rounded shadow">
+        <h2 className="text-lg font-medium text-gray-800">Chart of Demographics</h2>
+        <Doughnut
+          data={{
+            labels: ["Male", "Female"],
+            datasets: [
+              {
+                data: [maleAvg, femaleAvg],
+                backgroundColor: ["rgba(42, 127, 125, 0.6)", "rgba(71, 178, 176, 0.4)"],
+                cutout: "70%",
+              },
+            ],
+          }}
+        />
+        <div className="space-y-4">
+          <Legend
+            color="rgba(42, 127, 125, 0.6)"
+            label={`${maleAvg}% Males`}
+            icon
+          />
+          <Legend
+            color="rgba(71, 178, 176, 0.4)"
+            label={`${femaleAvg}% Females`}
+            icon
+          />
         </div>
-
-        {/* -------- RIGHT : LINE CHART -------- */}
-        <div className="bg-white p-6 rounded-lg shadow lg:col-span-2">
-          <h3 className="text-lg font-semibold text-gray-800 mb-4">
-            Demographics Analysis
-          </h3>
-
-          <div className="h-[360px]">
-            <Line options={lineOptions} data={lineData} />
-          </div>
+        <div className="absolute inset-0 flex flex-col items-center justify-center">
+          <p className="text-sm text-gray-500">Total Crowd</p>
+          <p className="text-2xl font-bold text-gray-800">100%</p>
         </div>
       </div>
+      <div className="col-span-2 bg-white p-6 rounded-xl shadow">
+        <h2 className="text-lg font-medium text-gray-800 mb-4">
+          Demographics Analysis
+        </h2>
+
+        <div className="h-[360px]">
+          <Line
+            data={{
+              labels,
+              datasets: [
+                {
+                  label: "Male",
+                  data: male,
+                  fill: true,
+                  borderColor: "rgba(42, 127, 125, 1)",
+                  backgroundColor: "rgba(42, 127, 125, 0.18)", // 👈 softer
+                  borderWidth: 2,
+                  tension: 0.4,
+                  pointRadius: 0,
+                },
+                {
+                  label: "Female",
+                  data: female,
+                  fill: true,
+                  borderColor: "rgba(71, 178, 176, 1)",
+                  backgroundColor: "rgba(71, 178, 176, 0.14)", // 👈 lighter
+                  borderWidth: 2,
+                  tension: 0.4,
+                  pointRadius: 0,
+                },
+              ],
+            }}
+            options={{
+              responsive: true,
+              maintainAspectRatio: false,
+              plugins: {
+                legend: {
+                  position: "top",
+                  align: "end",
+                  labels: {
+                    usePointStyle: true,
+                    pointStyle: "circle",
+                    padding: 16,
+                  },
+                },
+              },
+              interaction: {
+                mode: "nearest",
+                axis: "x",
+                intersect: false,
+              },
+              scales: {
+                x: {
+                  grid: {
+                    color: "rgba(0,0,0,0.05)",
+                    borderDash: [4, 4],
+                  },
+                },
+                y: {
+                  beginAtZero: true,
+                  grid: {
+                    color: "rgba(0,0,0,0.05)",
+                    borderDash: [4, 4],
+                  },
+                },
+              },
+            }}
+          />
+        </div>
+      </div>
+
     </div>
   );
-
 }
 
 function Legend({
@@ -246,7 +206,7 @@ function Legend({
           <path d="M5.5 21a6.5 6.5 0 0 1 13 0" />
         </svg>
       ) : (
-        <span className={`w-3 h-3 rounded-full ${color}`} />
+        <span className={`w-3 h-3 rounded-full bg-${color}`} />
       )}
       <span className="text-gray-700 font-medium">{label}</span>
     </div>

@@ -6,49 +6,77 @@ import {
     LinearScale,
     PointElement,
     LineElement,
-    Title,
     Tooltip,
     Legend,
     Filler,
 } from "chart.js";
-import { useEffect, useState } from "react";
 import { Line } from "react-chartjs-2";
+import { useEffect, useState } from "react";
 import { api } from "../utils/api";
 import { sitesStore } from "../utils/utils";
 
+/* ---------------- LIVE LINE PLUGIN ---------------- */
+const liveLinePlugin = {
+    id: "liveLine",
+    afterDraw(chart: any) {
+        const { ctx, chartArea, scales } = chart;
+        if (!chartArea) return;
+
+        const x = scales.x?.getPixelForValue(
+            chart.data.labels.length - 1
+        );
+
+        ctx.save();
+
+        // dashed red line
+        ctx.beginPath();
+        ctx.setLineDash([6, 6]);
+        ctx.strokeStyle = "#B91C1C";
+        ctx.lineWidth = 1.5;
+        ctx.moveTo(x, chartArea.top);
+        ctx.lineTo(x, chartArea.bottom);
+        ctx.stroke();
+
+        // LIVE label
+        ctx.setLineDash([]);
+        ctx.fillStyle = "#B91C1C";
+        ctx.font = "bold 11px sans-serif";
+        ctx.textAlign = "center";
+        ctx.fillText("LIVE", x, chartArea.top - 8);
+
+        ctx.restore();
+    },
+};
+
+/* ---------------- REGISTER ---------------- */
 ChartJS.register(
     CategoryScale,
     LinearScale,
     PointElement,
     LineElement,
-    Title,
     Tooltip,
     Legend,
-    Filler
+    Filler,
+    liveLinePlugin
 );
 
-// ---------------- CHART OPTIONS ----------------
+/* ---------------- OPTIONS ---------------- */
 const options = {
     responsive: true,
     maintainAspectRatio: false,
     plugins: {
         legend: {
-            display: true,
             position: "top" as const,
             align: "end" as const,
             labels: {
                 usePointStyle: true,
                 pointStyle: "circle",
-                padding: 15,
-                font: { size: 12 },
+                color: "#6B7280",
             },
         },
         tooltip: {
             mode: "index" as const,
             intersect: false,
-            callbacks: {
-                label: (ctx: any) => `Avg: ${ctx.parsed.y.toFixed(1)}`,
-            },
         },
     },
     interaction: {
@@ -59,143 +87,128 @@ const options = {
     scales: {
         x: {
             grid: {
-                display: true,
-                color: "rgba(0, 0, 0, 0.05)",
+                drawBorder: false,
+                color: "rgba(0,0,0,0.06)",
+                borderDash: [4, 4],
             },
             ticks: {
-                font: { size: 11 },
+                color: "#6B7280",
+            },
+            title: {
+                display: true,
+                text: "Time",
+                color: "#374151",
+                font: { weight: "500" },
             },
         },
         y: {
             beginAtZero: true,
-            suggestedMax: 150,
+            grid: {
+                drawBorder: false,
+                color: "rgba(0,0,0,0.06)",
+                borderDash: [4, 4],
+            },
             ticks: {
-                stepSize: 20,
-                font: { size: 11 },
+                color: "#6B7280",
             },
             title: {
                 display: true,
-                text: "Occupancy",
-                font: { size: 12 },
-            },
-            grid: {
-                display: true,
-                color: "rgba(0, 0, 0, 0.05)",
+                text: "Count",
+                color: "#374151",
+                font: { weight: "500" },
             },
         },
     },
 };
 
-// ---------------- COMPONENT ----------------
-export function Occupancy() {
-    const [dwellData, setDwellData] = useState<any>(null);
+/* ---------------- COMPONENT ---------------- */
+export function Occupancy({ date }: { date: Date }) {
+    const selectedSiteId = sitesStore((s) => s.selectedSiteId);
+    const loadSites = sitesStore((s) => s.loadSites);
+
+    const [rawData, setRawData] = useState<any>(null);
     const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
-    const [siteId, setSiteId] = useState<string | null>(null);
 
-    // 1️⃣ Load sites
+    /* Load sites once */
     useEffect(() => {
-        const loadSites = async () => {
-            try {
-                const response = await api.getSites();
-                sitesStore.getState().setSites(response.data);
-
-                if (response.data?.length > 0) {
-                    setSiteId(response.data[0].siteId);
-                }
-            } catch (err) {
-                console.error("Error loading sites:", err);
-                setError("Failed to load sites");
-            }
-        };
-
         loadSites();
-    }, []);
+    }, [loadSites]);
 
-    // 2️⃣ Fetch analytics when siteId is ready
+    /* Fetch occupancy */
     useEffect(() => {
-        if (!siteId) return;
+        if (!selectedSiteId) return;
 
-        const fetchAnalytics = async () => {
-            try {
-                setLoading(true);
-                setError(null);
+        const fetchData = async () => {
+            setLoading(true);
+            const now = Date.now();
+            const yesterday = now - 24 * 60 * 60 * 1000;
 
-                const now = Date.now();
-                const yesterday = now - 24 * 60 * 60 * 1000;
+            const res = await api.getOccupancyAnalytics(
+                selectedSiteId,
+                date,
+                now
+            );
 
-                const response = await api.getOccupancyAnalytics(
-                    siteId,
-                    yesterday,
-                    now
-                );
-
-                setDwellData(response.data);
-            } catch (err: any) {
-                console.error("Analytics error:", err);
-                setError(err.response?.data?.message || "Failed to load analytics");
-            } finally {
-                setLoading(false);
-            }
+            setRawData(res.data);
+            setLoading(false);
         };
 
-        fetchAnalytics();
-    }, [siteId]);
+        fetchData();
+    }, [selectedSiteId]);
 
-    // 3️⃣ Map API → chart
+    if (loading) return <p className="p-4">Loading occupancy…</p>;
+
+    /* Map API → Chart */
     const labels =
-        dwellData?.buckets?.map((b: any) =>
+        rawData?.buckets?.map((b: any) =>
             b.local.split(" ")[1].slice(0, 5)
         ) ?? [];
 
-    const avgValues =
-        dwellData?.buckets?.map((b: any) => b.avg) ?? [];
+    const values =
+        rawData?.buckets?.map((b: any) => b.avg) ?? [];
 
     const data = {
         labels,
         datasets: [
             {
-                label: "Avg Occupancy",
-                data: avgValues,
-                borderColor: "rgba(96, 165, 164, 1)",
-                backgroundColor: "rgba(96, 165, 164, 0.35)",
+                label: "Occupancy",
+                data: values,
                 fill: true,
-                tension: 0.4,
+                borderColor: "#6AA6A5",
+                backgroundColor: (context: any) => {
+                    const { ctx, chartArea } = context.chart;
+                    if (!chartArea) return "rgba(180, 205, 204, 0.6)";
+
+                    const gradient = ctx.createLinearGradient(
+                        0,
+                        chartArea.top,
+                        0,
+                        chartArea.bottom
+                    );
+
+                    gradient.addColorStop(0, "rgba(180, 205, 204, 0.65)");
+                    gradient.addColorStop(0.6, "rgba(180, 205, 204, 0.25)");
+                    gradient.addColorStop(1, "rgba(180, 205, 204, 0.05)");
+
+                    return gradient;
+                },
+
+                tension: 0.25,
                 pointRadius: 0,
-                pointHoverRadius: 5,
                 borderWidth: 2,
             },
         ],
     };
 
-    // ---------------- UI ----------------
-    if (loading) {
-        return <p className="p-4">Loading occupancy analytics...</p>;
-    }
-
-    if (error) {
-        return (
-            <div className="p-4 bg-red-50 border border-red-200 rounded">
-                <p className="text-red-600">{error}</p>
-            </div>
-        );
-    }
-
     return (
-        <div className="space-y-6">
-            {/* Chart */}
+        <div className="w-full">
             <div className="bg-white p-6 rounded-lg shadow">
                 <h3 className="text-base font-semibold text-gray-800 mb-4">
                     Overall Occupancy
                 </h3>
-
                 <div className="h-[350px]">
-                    {dwellData && <Line options={options} data={data} />}
+                    <Line data={data} options={options} />
                 </div>
-
-                <p className="text-center text-sm text-gray-600 mt-2">
-                    Time (Local)
-                </p>
             </div>
         </div>
     );

@@ -81,7 +81,7 @@ const Sidebar = () => {
                   : "text-gray-300 hover:bg-white/5"
                   }`}
               >
-                <Link href={menu.href}>
+                <Link className="flex items-center gap-3" href={menu.href}>
                   <img
                     src={`/${menu.src}.png`}
                     alt={menu.title}

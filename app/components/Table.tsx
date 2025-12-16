@@ -1,142 +1,128 @@
-"use client"
-import { useState, useEffect } from "react";
+"use client";
+
+import { useEffect, useState } from "react";
 import { api } from "../utils/api";
 import { sitesStore } from "../utils/utils";
 
 interface Entry {
-    personId: number;
+    personId: string;
     personName: string;
-    avatar: string;
-    gender: "Male" | "Female";
-    entryLocal: string;
-    exitLocal: string;
-    dwellMinutes: string;
+    gender: string;
+    entryLocal: string | null;
+    exitLocal: string | null;
+    dwellMinutes: number | null;
 }
 
+const ITEMS_PER_PAGE = 10;
+
 const CrowdEntriesTable = () => {
-    const [currentPage, setCurrentPage] = useState(1);
-    const [siteId, setSiteId] = useState<string | null>(null);
+    const selectedSiteId = sitesStore((s) => s.selectedSiteId);
+
     const [entries, setEntries] = useState<Entry[]>([]);
-    const itemsPerPage = 10;
+    const [page, setPage] = useState(1);
+    const [totalPages, setTotalPages] = useState(1);
+    const [loading, setLoading] = useState(false);
+
+    const parseDDMMYYYY = (value: string) => {
+        const [date, time] = value.split(" ");
+        const [dd, mm, yyyy] = date.split("/");
+        return new Date(`${yyyy}-${mm}-${dd}T${time}`);
+    };
 
     useEffect(() => {
-        api.getSites().then((res) => {
-            sitesStore.getState().setSites(res.data);
-            setSiteId(res.data?.[0]?.siteId);
-        });
-    }, []);
+        if (!selectedSiteId) return;
 
-    //   Fetch crowd entries
-    useEffect(() => {
-        const now = Date.now();
-        const yesterday = now - 24 * 60 * 60 * 1000;
-        if (siteId) {
-            api.getCrowdEntries(siteId, yesterday, now, itemsPerPage, currentPage).then((res) => {
-                setEntries(res.data.records);
-            });
-        }
-    }, [siteId]);
-    const totalPages = Math.ceil(entries.length / itemsPerPage);
-    const startIndex = (currentPage - 1) * itemsPerPage;
-    const endIndex = startIndex + itemsPerPage;
-    console.log("Entries: ", entries);
+        const fetchEntries = async () => {
+            try {
+                setLoading(true);
+
+                const now = Date.now();
+                const yesterday = now - 24 * 60 * 60 * 1000;
+
+                const res = await api.getCrowdEntries(
+                    selectedSiteId,
+                    yesterday,
+                    now,
+                    ITEMS_PER_PAGE,
+                    page
+                );
+
+                setEntries(res.data.records); // ✅ FIX
+                setTotalPages(res.data.totalPages);
+            } catch (err) {
+                console.error(err);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        fetchEntries();
+    }, [selectedSiteId, page]);
+
+    if (loading) return <div className="p-4">Loading...</div>;
 
     return (
-        <div className="bg-white rounded-lg shadow">
-            {/* Table */}
-            <div className="overflow-x-auto">
+        <>
+            <div className="bg-white rounded shadow">
                 <table className="min-w-full">
                     <thead>
-                        <tr className="bg-gray-100 border-b border-gray-200">
-                            <th className="py-3 px-6 text-left text-sm font-semibold text-gray-700">Name</th>
-                            <th className="py-3 px-6 text-left text-sm font-semibold text-gray-700">Sex</th>
-                            <th className="py-3 px-6 text-left text-sm font-semibold text-gray-700">Entry</th>
-                            <th className="py-3 px-6 text-left text-sm font-semibold text-gray-700">Exit</th>
-                            <th className="py-3 px-6 text-left text-sm font-semibold text-gray-700">Dwell Time</th>
+                        <tr className="bg-[#E8E8E8] text-gray-800">
+                            <th className="px-4 py-3 text-left">Name</th>
+                            <th className="px-4 py-3">Gender</th>
+                            <th className="px-4 py-3">Entry</th>
+                            <th className="px-4 py-3">Exit</th>
+                            <th className="px-4 py-3">Dwell</th>
                         </tr>
                     </thead>
                     <tbody>
-                        {entries.length === 0 ? (
-                            <tr>
-                                <td colSpan={5} className="py-6 text-center text-gray-500">
-                                    No entries found
+                        {entries.map((e) => (
+                            <tr key={e.personId} className="border-t border-[#1A1A1A1A] text-gray-500">
+                                <td className="px-4 py-3">{e.personName}</td>
+                                <td className="px-4 py-3 text-center">{e.gender.charAt(0).toUpperCase() + e.gender.slice(1)}</td>
+                                <td className="px-4 py-3 text-center">
+                                    {e.entryLocal
+                                        ? parseDDMMYYYY(e.entryLocal).toLocaleTimeString("en-US", {
+                                            hour: "numeric",
+                                            minute: "numeric",
+                                            hour12: true,
+                                        })
+                                        : "-"}
+                                </td>
+                                <td className="px-4 py-3 text-center">
+                                    {e.exitLocal
+                                        ? parseDDMMYYYY(e.exitLocal).toLocaleTimeString("en-US", {
+                                            hour: "numeric",
+                                            minute: "numeric",
+                                            hour12: true,
+                                        })
+                                        : "-"}
+                                </td>
+                                <td className="px-4 py-3 text-center">
+                                    {e.dwellMinutes ?? "-"}
                                 </td>
                             </tr>
-                        ) : (
-                            entries.map((entry, index) => (
-                                <tr
-                                    key={entry.personId}
-                                    className={`border-b border-gray-100 hover:bg-gray-50 ${index % 2 === 0 ? "bg-white" : "bg-gray-50/50"
-                                        }`}
-                                >
-                                    <td className="py-3 px-6">
-                                        <div className="flex items-center gap-3">
-                                            <img
-                                                src={entry.avatar}
-                                                alt={entry.personName}
-                                                className="w-8 h-8 rounded-full"
-                                            />
-                                            <span className="text-sm text-gray-700">
-                                                {entry.personName}
-                                            </span>
-                                        </div>
-                                    </td>
-                                    <td className="py-3 px-6 text-sm text-gray-600">
-                                        {entry.gender}
-                                    </td>
-                                    <td className="py-3 px-6 text-sm text-gray-600">
-                                        {entry.entryLocal}
-                                    </td>
-                                    <td className="py-3 px-6 text-sm text-gray-600">
-                                        {entry.exitLocal}
-                                    </td>
-                                    <td className="py-3 px-6 text-sm text-gray-600">
-                                        {entry.dwellMinutes}
-                                    </td>
-                                </tr>
-                            ))
-                        )}
+                        ))}
                     </tbody>
-
                 </table>
             </div>
-
-            {/* Pagination */}
-            <div className="flex items-center justify-center gap-2 py-4 border-t border-gray-200">
+            <div className="flex justify-center gap-2 py-4 text-gray-500">
                 <button
-                    onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
-                    disabled={currentPage === 1}
-                    className="p-2 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                    disabled={page === 1}
+                    onClick={() => setPage((p) => p - 1)}
                 >
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <polyline points="15 18 9 12 15 6" />
-                    </svg>
+                    ◀
                 </button>
-
-                {[...Array(totalPages)].map((_, i) => (
-                    <button
-                        key={i + 1}
-                        onClick={() => setCurrentPage(i + 1)}
-                        className={`w-8 h-8 rounded text-sm font-medium transition-colors ${currentPage === i + 1
-                            ? 'bg-gray-900 text-white'
-                            : 'text-gray-700 hover:bg-gray-100'
-                            }`}
-                    >
-                        {i + 1}
-                    </button>
-                ))}
-
+                <span>
+                    {page} / {totalPages}
+                </span>
                 <button
-                    onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
-                    disabled={currentPage === totalPages}
-                    className="p-2 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                    disabled={page === totalPages}
+                    onClick={() => setPage((p) => p + 1)}
                 >
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <polyline points="9 18 15 12 9 6" />
-                    </svg>
+                    ▶
                 </button>
             </div>
-        </div>
+        </>
     );
 };
 

@@ -1,12 +1,16 @@
-"use client"
+"use client";
 
-import Sidebar from "../components/Sidebar"
-import TopBar from "../components/TopBar"
-import { Occupancy } from "../components/Occupancy"
-import DemographicsChart from "../components/DemographicsChart"
-import Footfall from "../components/Footfall"
+import Sidebar from "../components/Sidebar";
+import TopBar from "../components/TopBar";
+import { Occupancy } from "../components/Occupancy";
+import DemographicsChart from "../components/DemographicsChart";
+import OccupancyStats from "../components/OccupancyStats";
+import CalendarDropdown from "../components/CalendarDropdown";
+import { useState } from "react";
 
 export default function Home() {
+    const [selectedDate, setSelectedDate] = useState<Date>(new Date());
+
     return (
         <div className="flex h-screen bg-gray-50">
             <Sidebar />
@@ -21,45 +25,31 @@ export default function Home() {
                             Overview
                         </h1>
 
-                        <button className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 rounded-lg text-sm text-gray-700 hover:bg-gray-50">
-                            <svg
-                                width="16"
-                                height="16"
-                                viewBox="0 0 24 24"
-                                fill="none"
-                                stroke="currentColor"
-                                strokeWidth="2"
-                            >
-                                <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
-                                <line x1="16" y1="2" x2="16" y2="6" />
-                                <line x1="8" y1="2" x2="8" y2="6" />
-                                <line x1="3" y1="10" x2="21" y2="10" />
-                            </svg>
-                            Today
-                        </button>
+                        <CalendarDropdown onChange={setSelectedDate} />
                     </div>
 
-                    <section className="space-y-4">
-                        <h2 className="text-lg font-semibold text-gray-800">
-                            Footfall
-                        </h2>
-                        <Footfall />
-                    </section>
-
-                    {/* Occupancy */}
+                    {/* Occupancy stats */}
                     <section className="space-y-4">
                         <h2 className="text-lg font-semibold text-gray-800">
                             Occupancy
                         </h2>
-                        <Occupancy />
+                        <OccupancyStats date={selectedDate} />
+                    </section>
+
+                    {/* Occupancy chart */}
+                    <section className="space-y-4">
+                        <Occupancy date={selectedDate} />
                     </section>
 
                     {/* Demographics */}
                     <section className="space-y-4">
-                        <DemographicsChart />
+                        <h2 className="text-lg font-semibold text-gray-800">
+                            Demographics
+                        </h2>
+                        <DemographicsChart date={selectedDate} />
                     </section>
                 </main>
             </div>
         </div>
-    )
+    );
 }
